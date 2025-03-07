@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { ChevronRight, TrendingUp, PieChart } from "lucide-react";
 
+const BASE_URL =
+  import.meta.env.MODE === "development"
+    ? "/api" // Uses Vite proxy in local development
+    : "https://smartdynamicprice-backend.onrender.com"; // Uses the real backend in production
+
+
 // API fetch functions with error handling
 const fetchProductData = async (productName) => {
   try {
-    const response = await fetch(`/api/product/${encodeURIComponent(productName)}`);
+    const response = await fetch(`${BASE_URL}/product/${encodeURIComponent(productName)}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
     console.log("Product Data:", data);
@@ -18,7 +24,7 @@ const fetchProductData = async (productName) => {
 const fetchDiscountData = async (formData) => {
   try {
     console.log("Sending Form Data to API:", formData);
-    const response = await fetch("/api/predict_discount/", {
+    const response = await fetch(`${BASE_URL}/predict_discount/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
@@ -36,7 +42,7 @@ const fetchDiscountData = async (formData) => {
 const fetchStockTrend = async (location, productName) => {
   try {
     const response = await fetch(
-      `/api/stock_trend?location=${encodeURIComponent(location)}&product=${encodeURIComponent(productName)}`
+      `${BASE_URL}/stock_trend?location=${encodeURIComponent(location)}&product=${encodeURIComponent(productName)}`
     );
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.text();
@@ -54,7 +60,6 @@ const cleanProductName = (productName) => {
   // Remove empty parentheses (including any whitespace inside them)
   return productName.replace(/\s*\(\s*\)\s*/g, '').trim();
 };
-
 
 export default function NextPage() {
   const [formData, setFormData] = useState({
@@ -203,7 +208,7 @@ export default function NextPage() {
                   onError={(e) => {
                     console.log("Image failed to load, using fallback");
                     e.target.onerror = null; // Prevent infinite loop
-                    e.target.src = `/api/placeholder/400/400`;
+                    e.target.src = `${BASE_URL}/placeholder/400/400`;
                     
                     // Add a timeout to handle cases where the fallback also fails
                     const imgTimeout = setTimeout(() => {
@@ -314,22 +319,22 @@ export default function NextPage() {
               </span>
 
               <div style={styles.descriptionsContainer}>
-            {productData.product_desc && (
-              <>
-                <p style={styles.descriptionLabel}>Product Description:</p>
-                <p style={styles.productDesc}>
-                  {productData.product_desc}
+                {productData.product_desc && (
+                  <>
+                    <p style={styles.descriptionLabel}>Product Description:</p>
+                    <p style={styles.productDesc}>
+                      {productData.product_desc}
+                    </p>
+                  </>
+                )}
+                
+                <p style={styles.descriptionLabel}>Additional Information:</p>
+                <p style={styles.productDescSecondary || styles.productDesc}>
+                  This is a premium quality {cleanProductName(formData.Product_Name || productData.product_name) || "wheat"} available in {
+                    formData.Location || "your area"
+                  }. It has a shelf life of {formData.Shelf_Life_days || "N/A"} days.
                 </p>
-              </>
-            )}
-            
-            <p style={styles.descriptionLabel}>Additional Information:</p>
-            <p style={styles.productDescSecondary}>
-              This is a premium quality {cleanProductName(formData.Product_Name || productData.product_name) || "wheat"} available in {
-                formData.Location || "your area"
-              }. It has a shelf life of {formData.Shelf_Life_days || "N/A"} days.
-            </p>
-          </div>
+              </div>
 
               <div style={styles.priceContainer}>
                 <div style={styles.mrpSection}>
@@ -540,6 +545,25 @@ const styles = {
     backgroundColor: '#f9f9f9',
     borderRadius: '8px',
     borderLeft: '4px solid #2c9e70',
+  },
+  productDescSecondary: {
+    color: '#555',
+    fontSize: '16px',
+    lineHeight: '1.5',
+    marginBottom: '20px',
+    padding: '12px',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+    borderLeft: '4px solid #2c9e70',
+  },
+  descriptionsContainer: {
+    marginBottom: '20px',
+  },
+  descriptionLabel: {
+    fontSize: '14px',
+    fontWeight: 'bold',
+    color: '#4a5568',
+    marginBottom: '5px',
   },
   productCategory: {
     fontSize: "14px",
