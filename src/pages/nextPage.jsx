@@ -6,7 +6,6 @@ const BASE_URL =
     ? "/api" // Uses Vite proxy in local development
     : "https://smartdynamicprice-backend.onrender.com"; // Uses the real backend in production
 
-
 // API fetch functions with error handling
 const fetchProductData = async (productName) => {
   try {
@@ -41,15 +40,24 @@ const fetchDiscountData = async (formData) => {
 
 const fetchStockTrend = async (location, productName) => {
   try {
+    console.log(`Fetching stock trend for ${productName} in ${location}...`);
     const response = await fetch(
       `${BASE_URL}/stock_trend?location=${encodeURIComponent(location)}&product=${encodeURIComponent(productName)}`
     );
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.text();
-    console.log("Stock Trend Data:", data);
+    
+    if (!response.ok) {
+      console.log(`Stock trend API returned status: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.text(); // Get HTML as text
+    console.log("Stock trend data received:", data.substring(0, 100) + "..."); // Log beginning of response
+    console.log("Stock trend HTML length:", data.length);
+    
     return data;
   } catch (error) {
     console.error("Error fetching stock trend:", error);
+    console.log("Failed to retrieve stock trend data");
     return "";
   }
 };
@@ -59,6 +67,26 @@ const cleanProductName = (productName) => {
   
   // Remove empty parentheses (including any whitespace inside them)
   return productName.replace(/\s*\(\s*\)\s*/g, '').trim();
+};
+
+// Create a CSS style element for keyframe animation
+const createStyleElement = () => {
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      border-top: 4px solid #3182ce;
+      animation: spin 1s linear infinite;
+    }
+  `;
+  return styleEl;
 };
 
 export default function NextPage() {
@@ -86,6 +114,24 @@ export default function NextPage() {
   const [discountData, setDiscountData] = useState(null);
   const [stockTrend, setStockTrend] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+
+  // Add the keyframe animation style to document
+  useEffect(() => {
+    // Check if we need to add the style element
+    if (!document.querySelector('style[data-spinner-style]')) {
+      const styleEl = createStyleElement();
+      styleEl.setAttribute('data-spinner-style', 'true');
+      document.head.appendChild(styleEl);
+    }
+    
+    // Clean up on component unmount
+    return () => {
+      const styleEl = document.querySelector('style[data-spinner-style]');
+      if (styleEl) {
+        styleEl.remove();
+      }
+    };
+  }, []);
 
   // Load form data from localStorage
   useEffect(() => {
@@ -167,13 +213,43 @@ export default function NextPage() {
     }
   }, [formData.Product_Name, formData.Location]);
 
+  // Add effect to handle Plotly chart rendering
+  useEffect(() => {
+    if (stockTrend && !isLoading) {
+      // Find the chart container
+      const chartContainer = document.getElementById('stock-trend-container');
+      if (chartContainer) {
+        // Execute any scripts in the HTML content
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(stockTrend, 'text/html');
+        
+        // Extract scripts from parsed HTML
+        const scripts = doc.querySelectorAll('script');
+        
+        // First, add all non-script content
+        chartContainer.innerHTML = stockTrend;
+        
+        // Then, execute scripts manually to ensure they run
+        scripts.forEach(script => {
+          const newScript = document.createElement('script');
+          if (script.src) {
+            newScript.src = script.src;
+          } else {
+            newScript.textContent = script.textContent;
+          }
+          document.body.appendChild(newScript);
+        });
+      }
+    }
+  }, [stockTrend, isLoading]);
+
   // Calculate optimal price by subtracting the max discount from MRP
   const optimalPrice = 
     discountData?.max_discount !== undefined
       ? (formData.MRP - discountData.max_discount).toFixed(2)
       : (formData.MRP ? (formData.MRP * 0.9).toFixed(2) : 0);
 
-  // Get product image URL - using the provided fallback image instead of placeholder API
+  // Get product image URL
   const getProductImageUrl = () => {
     // First check if product data has an image URL
     if (productData && productData.product_image_link) {
@@ -184,11 +260,11 @@ export default function NextPage() {
     return "https://img.freepik.com/free-vector/hand-drawn-pasta-cartoon-illustration_23-2150645133.jpg?semt=ais_hybrid";
   };
 
-  // Loading spinner component
+  // Loading spinner component with CSS class for animation
   const LoadingSpinner = () => (
     <div style={styles.loadingSpinner}>
-      <div style={styles.spinner}></div>
-      <p>Loading data...</p>
+      <div className="loading-spinner"></div>
+      <p style={{marginTop: '10px'}}>Loading data...</p>
     </div>
   );
 
@@ -259,23 +335,20 @@ export default function NextPage() {
               {isLoading ? (
                 <LoadingSpinner />
               ) : stockTrend ? (
-                <img
-                  src={`data:image/png;base64,${stockTrend}`}
-                  alt="Stock Trend"
-                  style={styles.graphImage}
-                  onError={(e) => {
-                    console.log("Stock trend image failed to load");
-                    e.target.onerror = null;
-                    e.target.style.display = 'none';
-                    
-                    // Create a fallback message element
-                    const fallbackMessage = document.createElement('p');
-                    fallbackMessage.textContent = 'Unable to load trend data';
-                    e.target.parentNode.appendChild(fallbackMessage);
+                <div
+                  id="stock-trend-container"
+                  style={{ 
+                    width: "100%", 
+                    height: "300px", 
+                    overflow: "hidden",
+                    borderRadius: "8px"
                   }}
                 />
               ) : (
-                <p>No trend data available</p>
+                <div style={styles.noDataMessage}>
+                  <p>No trend data available for this product and location</p>
+                  <p style={styles.smallText}>Try a different product or location</p>
+                </div>
               )}
             </div>
           </div>
@@ -641,20 +714,6 @@ const styles = {
     fontWeight: "bold",
     textAlign: "right",
   },
-  tdValuePositive: {
-    padding: "12px",
-    borderBottom: "1px solid #e2e8f0",
-    color: "#38a169",
-    fontWeight: "bold",
-    textAlign: "right",
-  },
-  tdValueNegative: {
-    padding: "12px",
-    borderBottom: "1px solid #e2e8f0",
-    color: "#e53e3e",
-    fontWeight: "bold",
-    textAlign: "right",
-  },
   tdValueFinal: {
     padding: "12px",
     borderBottom: "1px solid #e2e8f0",
@@ -689,16 +748,13 @@ const styles = {
     alignItems: "center",
     padding: "20px",
   },
-  spinner: {
-    width: "40px",
-    height: "40px",
-    border: "4px solid rgba(0, 0, 0, 0.1)",
-    borderRadius: "50%",
-    borderTop: "4px solid #3182ce",
-    animation: "spin 1s linear infinite",
+  noDataMessage: {
+    textAlign: "center",
+    color: "#718096",
   },
-  "@keyframes spin": {
-    "0%": { transform: "rotate(0deg)" },
-    "100%": { transform: "rotate(360deg)" },
+  smallText: {
+    fontSize: "14px",
+    color: "#a0aec0",
+    marginTop: "5px",
   },
 };
